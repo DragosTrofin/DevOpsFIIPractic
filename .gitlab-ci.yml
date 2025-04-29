@@ -1,0 +1,42 @@
+stages:
+  - build
+  - push
+  - deploy
+
+build-image:
+  stage: build
+  before_script:
+    - echo "Login to Docker Local Repository..."
+    - echo $CI_REGISTRY_PASSWORD | docker login -u $CI_REGISTRY_USER --password-stdin  $CI_REGISTRY
+  script:
+    - echo "Build springboot Docker image..."
+    - docker build -t $CI_REGISTRY_IMAGE:$CI_COMMIT_SHORT_SHA .
+    - echo "$CI_REGISRTY_IMAGE:$CI_COMMIT_SHORT_SHA"
+  after_script:
+    - echo "Script executed successfully."
+    - docker logout
+  tags:
+    - build
+
+
+push-image:
+  stage: push
+  before_script:
+    - echo "Login to Docker Local Repository..."
+    - echo $CI_REGISTRY_PASSWORD | docker login -u $CI_REGISTRY_USER --password-stdin  $CI_REGISTRY
+  script:
+    - echo "Push springboot Docker image..."
+    - docker push "$CI_REGISTRY_IMAGE:$CI_COMMIT_SHORT_SHA"
+  after_script:
+    - echo "Script executed successfully."
+    - echo "Logout from Docker Local Repository'..."
+    - docker logout
+  tags:
+    - build
+
+deploy-image:
+  stage: deploy
+  script: ansible-playbook -i "app.fiipractic.lan," deploy.yml
+  tags:
+    - build
+

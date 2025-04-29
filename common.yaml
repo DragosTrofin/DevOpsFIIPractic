@@ -1,0 +1,109 @@
+---
+- name: Install Docker:P
+  hosts: all
+  become: yes
+
+  vars:
+    root_ca_local_path: "~/ca.crt"
+    root_ca_remote_path: "/etc/pki/ca-trust/source/anchors/ca.crt"
+    banner: |
+      This server is restricted to authorized users only. All activities on this system are logged.
+      Unauthorized access will be fully investigated and reported to the appropriate law enforcement agencies.
+
+  tasks:
+    - name: Deactivate firewall
+      service:
+        name: firewalld
+        state: stopped
+        enabled: false
+
+    - name: Deactivate SELinux
+      ansible.posix.selinux:
+        state: disabled
+
+    - name: Set timezone
+      community.general.timezone:
+        name: Europe/Bucharest
+
+    - name: Prohibit root login
+      lineinfile:
+        dest: /etc/ssh/sshd_config
+        regexp: '^PermitRootLogin'
+        line: "PermitRootLogin prohibit-password"
+        state: present
+        backup: yes
+      notify:
+        - restart sshd
+
+    - name: Set SSH banner file
+      copy:
+        dest: /etc/issue.net
+        content: "{{ banner }}"
+        owner: root
+        group: root
+        mode: '0644'
+
+    - name: Enable SSH banner
+      lineinfile:
+        path: /etc/ssh/sshd_config
+        regexp: '^Banner'
+        line: 'Banner /etc/issue.net'
+      notify:
+        - restart sshd
+
+    - name: install CA cert
+      copy:
+        src: "{{ root_ca_local_path }}"
+        dest: "{{ root_ca_remote_path }}"
+        owner: root
+        group: root
+        mode: '0644'
+
+    - name: update CA trust
+      command: update-ca-trust extract
+
+    - name: Add Docker repo
+      yum_repository:
+        name: docker-ce-stable
+        description: Docker CE Stable
+        baseurl: https://download.docker.com/linux/centos/$releasever/$basearch/stable
+        gpgcheck: yes
+        gpgkey: https://download.docker.com/linux/centos/gpg
+        enabled: yes
+
+    - name: Install Docker packages
+      package:
+        name: "{{ item }}"
+        state: present
+      loop:
+        - docker-ce
+        - docker-ce-cli
+        - containerd.io
+        - docker-compose-plugin
+
+    - name: Enable and start Docker
+      service:
+        name: docker
+        state: started
+        enabled: yes
+
+  handlers:
+    - name: restart sshd
+      service:
+        name: sshd
+        state: restarted
+
+- name: Install GitLab packages
+  hosts: gitlab
+  become: yes
+
+  tasks:
+    - name: Install GitLab Runner
+      yum:
+        name: gitlab-runner
+        state: present
+
+    - name: Install GitLab CE
+      yum:
+        name: gitlab-ce
+        state: present
